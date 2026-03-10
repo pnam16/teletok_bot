@@ -90,81 +90,97 @@ export const runTikTokBot = async ({runOnce = false} = {}) => {
     throw err;
   }
 
+  const CONCURRENCY = 2;
+
+  const processOneUpdate = async (update) => {
+    const message = update.message ?? update.edited_message;
+    if (!message) {
+      return;
+    }
+
+    const text = (message.text ?? message.caption ?? "").trim();
+    const chat = message.chat;
+    const chatId = chat?.id;
+
+    if (
+      chatId &&
+      [PANIC_COMMAND, REMOVE_COMMAND].includes(text) &&
+      message.reply_to_message
+    ) {
+      const replied = message.reply_to_message;
+      const targetId = replied.message_id;
+      const isBotMessage = replied.from?.is_bot === true;
+
+      if (!isBotMessage) {
+        try {
+          await sendTextMessage({
+            chatId,
+            replyToMessageId: message.message_id,
+            text: "Chỉ có thể xoá tin do bot gửi. Reply vào tin video reup của bot rồi gửi lại /panic.",
+          });
+        } catch (e) {
+          console.error(
+            new Date().toISOString(),
+            "Failed to send 'bot-only' hint:",
+            e,
+          );
+        }
+        return;
+      }
+
+      try {
+        await deleteMessage({chatId, messageId: targetId});
+      } catch (err) {
+        console.error(
+          new Date().toISOString(),
+          "Failed to delete message:",
+          err,
+        );
+        try {
+          await sendTextMessage({
+            chatId,
+            replyToMessageId: message.message_id,
+            text: "Lỗi xoá tin nhắn.",
+          });
+        } catch (notifyErr) {
+          console.error(
+            new Date().toISOString(),
+            "Failed to send error message:",
+            notifyErr,
+          );
+        }
+      }
+      return;
+    }
+
+    const url = extractTikTokUrl(text);
+    if (!url) {
+      return;
+    }
+
+    await handleTikTokMessage(message, url);
+  };
+
+  const processWithConcurrency = async (updates) => {
+    const run = async (idx) => {
+      if (idx >= updates.length) return;
+      await processOneUpdate(updates[idx]);
+      await run(idx + CONCURRENCY);
+    };
+    await Promise.all(
+      Array.from({length: Math.min(CONCURRENCY, updates.length)}, (_, i) =>
+        run(i),
+      ),
+    );
+  };
+
   // Main long-poll loop
   while (true) {
     try {
       const updates = await getUpdates({offset, timeoutSeconds: 25});
       if (Array.isArray(updates) && updates.length > 0) {
-        for (const update of updates) {
-          offset = update.update_id + 1;
-
-          const message = update.message ?? update.edited_message;
-          if (!message) {
-            continue;
-          }
-
-          const text = (message.text ?? message.caption ?? "").trim();
-          const chat = message.chat;
-          const chatId = chat?.id;
-
-          if (
-            chatId &&
-            [PANIC_COMMAND, REMOVE_COMMAND].includes(text) &&
-            message.reply_to_message
-          ) {
-            const replied = message.reply_to_message;
-            const targetId = replied.message_id;
-            const isBotMessage = replied.from?.is_bot === true;
-
-            if (!isBotMessage) {
-              try {
-                await sendTextMessage({
-                  chatId,
-                  replyToMessageId: message.message_id,
-                  text: "Chỉ có thể xoá tin do bot gửi. Reply vào tin video reup của bot rồi gửi lại /panic.",
-                });
-              } catch (e) {
-                console.error(
-                  new Date().toISOString(),
-                  "Failed to send 'bot-only' hint:",
-                  e,
-                );
-              }
-              continue;
-            }
-
-            try {
-              await deleteMessage({chatId, messageId: targetId});
-            } catch (err) {
-              console.error(
-                new Date().toISOString(),
-                "Failed to delete message:",
-                err,
-              );
-              try {
-                await sendTextMessage({
-                  chatId,
-                  replyToMessageId: message.message_id,
-                  text: "Lỗi xoá tin nhắn.",
-                });
-              } catch (notifyErr) {
-                console.error(
-                  new Date().toISOString(),
-                  "Failed to send error message:",
-                  notifyErr,
-                );
-              }
-            }
-            continue;
-          }
-
-          const url = extractTikTokUrl(text);
-          if (!url) {
-            continue;
-          }
-
-          await handleTikTokMessage(message, url);
-        }
+        offset = updates[updates.length - 1].update_id + 1;
+        await processWithConcurrency(updates);
       }
     } catch (err) {
       console.error(new Date().toISOString(), "Polling error:", err);

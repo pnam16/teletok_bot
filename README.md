@@ -44,8 +44,10 @@ Teletok is a Node.js bot that listens in a Telegram chat, detects TikTok links, 
 
 | Script | Description |
 |--------|-------------|
-| `npm start` | Run bot (long-poll loop). |
-| `npm run check` | Run one poll cycle and exit. |
+| `npm run build` | Bundle app with esbuild to `dist/index.js`. |
+| `npm run dev` | Run bot from source (development). |
+| `npm start` | Run built bundle (long-poll loop). Run `npm run build` first. |
+| `npm run check` | Run one poll cycle from source and exit. |
 | `npm run lint` | Biome check and fix. |
 | `npm run pm2` | Start with PM2. |
 
@@ -116,7 +118,7 @@ You can also run Teletok inside a container. The provided `Dockerfile`:
 
 - Uses `node:20-slim`.
 - Installs `yt-dlp` (standalone binary from GitHub), `ffmpeg`, and `python3`.
-- Installs production dependencies and runs `src/index.js`.
+- Builds the app with esbuild, installs production dependencies, and runs `dist/index.js`.
 
 Build and run directly with Docker:
 

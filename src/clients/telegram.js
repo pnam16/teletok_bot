@@ -1,54 +1,44 @@
-import {readFile} from "fs/promises";
+import axios from "axios";
+import FormData from "form-data";
+import {createReadStream} from "fs";
 import {basename} from "path";
 
 import {withRetry} from "../lib/retry.js";
 
 const TELEGRAM_API_BASE = "https://api.telegram.org";
 const TELEGRAM_TIMEOUT_MS = 30_000;
+const TELEGRAM_VIDEO_UPLOAD_TIMEOUT_MS = 90_000;
+
+let _cachedToken = null;
 
 const getTelegramToken = () => {
+  if (_cachedToken !== null) {
+    return _cachedToken;
+  }
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) {
     throw new Error("TELEGRAM_BOT_TOKEN is not set");
   }
+  _cachedToken = token;
   return token;
-};
-
-const withTimeout = (ms) => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    controller.abort();
-  }, ms);
-
-  return {controller, timeoutId};
 };
 
 const requestJson = async (method, body) => {
   const token = getTelegramToken();
+  const url = `${TELEGRAM_API_BASE}/bot${token}/${method}`;
 
   return await withRetry(async () => {
-    const {controller, timeoutId} = withTimeout(TELEGRAM_TIMEOUT_MS);
-    try {
-      const res = await fetch(`${TELEGRAM_API_BASE}/bot${token}/${method}`, {
-        body: JSON.stringify(body),
-        headers: {"Content-Type": "application/json"},
-        method: "POST",
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Telegram API ${res.status}: ${text}`);
-      }
-      const data = await res.json();
-      if (!data.ok) {
-        throw new Error(
-          `Telegram API error for ${method}: ${data.description ?? "unknown error"}`,
-        );
-      }
-      return data.result;
-    } finally {
-      clearTimeout(timeoutId);
+    const res = await axios.post(url, body, {
+      headers: {"Content-Type": "application/json"},
+      timeout: TELEGRAM_TIMEOUT_MS,
+    });
+    const data = res.data;
+    if (!data.ok) {
+      throw new Error(
+        `Telegram API error for ${method}: ${data.description ?? "unknown error"}`,
+      );
     }
+    return data.result;
   });
 };
 
@@ -106,12 +96,12 @@ export const sendVideo = async ({
   }
 
   const token = getTelegramToken();
-  const buffer = await readFile(filePath);
-  const blob = new Blob([buffer], {type: "video/mp4"});
+  const url = `${TELEGRAM_API_BASE}/bot${token}/sendVideo`;
   const form = new FormData();
-
   form.append("chat_id", String(chatId));
-  form.append("video", blob, basename(filePath));
+  form.append("video", createReadStream(filePath), {
+    filename: basename(filePath),
+  });
   if (caption) {
     form.append("caption", caption);
   }
@@ -120,19 +110,11 @@ export const sendVideo = async ({
   }
 
   await withRetry(async () => {
-    const {controller, timeoutId} = withTimeout(TELEGRAM_TIMEOUT_MS);
-    try {
-      const res = await fetch(`${TELEGRAM_API_BASE}/bot${token}/sendVideo`, {
-        body: form,
-        method: "POST",
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Telegram API ${res.status}: ${text}`);
-      }
-    } finally {
-      clearTimeout(timeoutId);
-    }
+    await axios.post(url, form, {
+      headers: form.getHeaders(),
+      maxBodyLength: Number.POSITIVE_INFINITY,
+      maxContentLength: Number.POSITIVE_INFINITY,
+      timeout: TELEGRAM_VIDEO_UPLOAD_TIMEOUT_MS,
+    });
   });
 };

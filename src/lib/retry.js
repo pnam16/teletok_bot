@@ -6,12 +6,15 @@ const isRetryable = (err) => {
   if (
     msg.includes("fetch failed") ||
     msg.includes("ECONNRESET") ||
-    msg.includes("ETIMEDOUT")
+    msg.includes("ETIMEDOUT") ||
+    msg.includes("timeout of") ||
+    msg.includes("Network Error")
   ) {
     return true;
   }
-  const status = Number.parseInt(msg.replace(/\D/g, ""), 10);
-  return status >= 500 && status < 600;
+  const status =
+    err?.response?.status ?? Number.parseInt(msg.replace(/\D/g, ""), 10);
+  return Number.isFinite(status) && status >= 500 && status < 600;
 };
 
 /**
