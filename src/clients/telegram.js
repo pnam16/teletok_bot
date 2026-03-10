@@ -65,6 +65,19 @@ export const getUpdates = async ({offset, timeoutSeconds = 25} = {}) => {
   return [];
 };
 
+export const deleteMessage = async ({chatId, messageId}) => {
+  if (!chatId) {
+    throw new Error("chatId is required");
+  }
+  if (messageId == null) {
+    throw new Error("messageId is required");
+  }
+  await requestJson("deleteMessage", {
+    chat_id: chatId,
+    message_id: messageId,
+  });
+};
+
 export const sendTextMessage = async ({chatId, text, replyToMessageId}) => {
   if (!chatId) {
     throw new Error("chatId is required");

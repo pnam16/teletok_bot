@@ -1,4 +1,9 @@
-import {getUpdates, sendTextMessage, sendVideo} from "../clients/telegram.js";
+import {
+  deleteMessage,
+  getUpdates,
+  sendTextMessage,
+  sendVideo,
+} from "../clients/telegram.js";
 import {downloadTikTokVideo} from "../clients/tiktok.js";
 
 const TIKTOK_URL_REGEX = /https?:\/\/(?:www\.)?(?:vm\.|vt\.)?tiktok\.com\/\S+/i;
@@ -9,6 +14,9 @@ const sleep = (ms) =>
       resolve();
     }, ms);
   });
+
+const PANIC_COMMAND = "/panic";
+const REMOVE_COMMAND = "/remove";
 
 const extractTikTokUrl = (text) => {
   if (!text) {
@@ -83,7 +91,6 @@ export const runTikTokBot = async ({runOnce = false} = {}) => {
   }
 
   // Main long-poll loop
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
       const updates = await getUpdates({offset, timeoutSeconds: 25});
@@ -96,7 +103,61 @@ export const runTikTokBot = async ({runOnce = false} = {}) => {
             continue;
           }
 
-          const text = message.text ?? message.caption ?? "";
+          const text = (message.text ?? message.caption ?? "").trim();
+          const chat = message.chat;
+          const chatId = chat?.id;
+
+          if (
+            chatId &&
+            [PANIC_COMMAND, REMOVE_COMMAND].includes(text) &&
+            message.reply_to_message
+          ) {
+            const replied = message.reply_to_message;
+            const targetId = replied.message_id;
+            const isBotMessage = replied.from?.is_bot === true;
+
+            if (!isBotMessage) {
+              try {
+                await sendTextMessage({
+                  chatId,
+                  replyToMessageId: message.message_id,
+                  text: "Chỉ có thể xoá tin do bot gửi. Reply vào tin video reup của bot rồi gửi lại /panic.",
+                });
+              } catch (e) {
+                console.error(
+                  new Date().toISOString(),
+                  "Failed to send 'bot-only' hint:",
+                  e,
+                );
+              }
+              continue;
+            }
+
+            try {
+              await deleteMessage({chatId, messageId: targetId});
+            } catch (err) {
+              console.error(
+                new Date().toISOString(),
+                "Failed to delete message:",
+                err,
+              );
+              try {
+                await sendTextMessage({
+                  chatId,
+                  replyToMessageId: message.message_id,
+                  text: "Lỗi xoá tin nhắn.",
+                });
+              } catch (notifyErr) {
+                console.error(
+                  new Date().toISOString(),
+                  "Failed to send error message:",
+                  notifyErr,
+                );
+              }
+            }
+            continue;
+          }
+
           const url = extractTikTokUrl(text);
           if (!url) {
             continue;
