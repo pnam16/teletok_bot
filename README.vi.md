@@ -1,22 +1,53 @@
-## Node Bot Template (Tiếng Việt)
+## Teletok – TikTok Telegram Reupload Bot (Tiếng Việt)
 
-Template bot Node.js tối giản dùng ES modules, `dotenv` và một vòng lặp theo chu kỳ đơn giản.  
-Dùng repo này như điểm xuất phát cho các bot nhỏ (Telegram, HTTP polling, TikTok downloader, v.v.).
+Teletok là bot Node.js nghe trong nhóm Telegram, tự phát hiện link TikTok, tải video về bằng CLI ngoài (ví dụ `yt-dlp`), reup lại video vào chính nhóm và xoá file tạm trên máy.
+
+> Lưu ý: Khi dùng bất kỳ tool tải TikTok nào, bạn tự chịu trách nhiệm tuân thủ điều khoản của TikTok và luật tại nơi bạn sống.
 
 ### Cách hoạt động
 
 - **Entry point**: `src/index.js`
   - Load biến môi trường từ `.env` thông qua `dotenv/config`.
-  - Định nghĩa hàm `runJobOnce()`, nơi bạn implement logic chính của bot.
-  - Nếu chạy với `--once` thì chỉ gọi `runJobOnce()` một lần rồi thoát.
-  - Nếu không, bot sẽ gọi `runJobOnce()` theo chu kỳ (mặc định 60 giây, có thể cấu hình bằng `BOT_INTERVAL_MS`).
+  - Gọi `runTikTokBot()` từ `src/jobs/tiktok-bot.js` để khởi động vòng lặp bot.
+  - Hỗ trợ tham số `--once` để chạy một vòng poll rồi thoát (hữu ích khi debug).
 
-- **Config**: `src/config/index.js`
-  - Cung cấp hằng số `DATA_DIR` (thư mục `dist/` dưới thư mục làm việc hiện tại) để bạn lưu state hoặc file output nếu cần.
+- **Job**: `src/jobs/tiktok-bot.js`
+  - Long-poll API `getUpdates` của Telegram.
+  - Với mỗi message (hoặc edited message), trích link TikTok đầu tiên trong nội dung.
+  - Tải video TikTok, reup lại dưới dạng video reply vào message gốc và dọn file tạm; nếu lỗi thì gửi tin nhắn lỗi ngắn.
 
-- **Helpers**: `src/lib/retry.js`
-  - Hàm generic `withRetry(fn, options)` để chạy lại các thao tác async khi gặp lỗi tạm thời (ví dụ: lỗi mạng).
-  - Template không dùng trực tiếp, nhưng bạn có thể dùng cho HTTP client hoặc I/O khác.
+- **Clients**:
+  - `src/clients/telegram.js` – wrapper mỏng cho Telegram Bot API:
+    - `getUpdates`, `sendTextMessage`, `sendVideo`.
+  - `src/clients/tiktok.js` – helper tải TikTok:
+    - Gọi CLI ngoài (mặc định `yt-dlp`), lưu video vào thư mục tạm, trả về `{filePath, cleanup}`.
+
+- **Config & helpers**:
+  - `src/config/index.js` – hằng `DATA_DIR` (hiện chưa dùng, để dành cho state về sau).
+  - `src/lib/retry.js` – helper `withRetry(fn, options)` để retry các thao tác async khi lỗi tạm thời.
+
+### Cấu trúc project
+
+| Đường dẫn | Mục đích |
+|-----------|----------|
+| `src/index.js` | Entry point; gọi `runTikTokBot()`. |
+| `src/jobs/tiktok-bot.js` | Vòng long-poll, trích URL, tải + reup. |
+| `src/clients/telegram.js` | Telegram Bot API: `getUpdates`, `sendTextMessage`, `sendVideo`. |
+| `src/clients/tiktok.js` | Chạy downloader ngoài (yt-dlp), thư mục tạm + cleanup. |
+| `src/config/index.js` | `DATA_DIR`. |
+| `src/lib/retry.js` | `withRetry()`. |
+| `ecosystem.config.cjs` | Cấu hình PM2 (`teletok_bot`). |
+| `Dockerfile` / `docker-compose.yml` | Build và chạy container. |
+| `scripts/pm2-resurrect.sh` | PM2 resurrect + start + save (ví dụ lúc login). |
+
+### Scripts
+
+| Script | Mô tả |
+|--------|--------|
+| `npm start` | Chạy bot (vòng long-poll). |
+| `npm run check` | Chạy một vòng poll rồi thoát. |
+| `npm run lint` | Biome check và fix. |
+| `npm run pm2` | Chạy bằng PM2. |
 
 ### Cài đặt
 
@@ -28,36 +59,47 @@ Dùng repo này như điểm xuất phát cho các bot nhỏ (Telegram, HTTP pol
    pnpm install
    ```
 
-2. **Cấu hình environment**
+2. **Cài CLI tải TikTok**
 
-   Copy `.env.example` sang `.env` rồi chỉnh lại giá trị nếu cần:
+   Cài [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) (khuyến nghị) hoặc CLI khác có thể tải video TikTok, và đảm bảo nó nằm trong `PATH`.
+
+3. **Cấu hình environment**
+
+   Copy `.env.example` sang `.env` rồi chỉnh lại:
 
    ```bash
    cp .env.example .env
    ```
 
-   Các biến hiện có:
+   Các biến:
 
    - `NODE_ENV` – tùy chọn, mặc định `development`.
-   - `BOT_INTERVAL_MS` – tùy chọn, interval (ms) giữa các lần chạy job (mặc định `60000`).
+   - `TELEGRAM_BOT_TOKEN` – token bot lấy từ `@BotFather`.
+   - `TIKTOK_DOWNLOADER_BIN` – tùy chọn, path tới binary downloader (mặc định `yt-dlp`).
+   - `TIKTOK_DOWNLOADER_ARGS` – tùy chọn, thêm tham số CLI (tách bằng space), mặc định `-o %(id)s.%(ext)s`.
 
-3. **Chạy bot**
+4. **Thêm bot vào nhóm Telegram**
+
+   - Tạo bot qua `@BotFather` và lấy token.
+   - Add bot vào nhóm, cấp quyền đọc message và gửi message.
+
+5. **Chạy bot bằng Node**
 
    ```bash
-   # Chạy liên tục (interval loop)
+   # Chạy liên tục (long-polling loop)
    npm start
 
-   # Chạy một lần rồi thoát (hữu ích để test job)
+   # Chạy một vòng poll rồi thoát (debug)
    npm run check
    ```
 
    Bạn có thể dùng `pnpm` thay cho `npm` nếu quen.
 
-### PM2 (tùy chọn)
+### PM2 (tùy chọn, chạy trực tiếp trên máy)
 
-Template này có sẵn cấu hình PM2 cơ bản trong `ecosystem.config.cjs`:
+Repo có sẵn cấu hình PM2 trong `ecosystem.config.cjs`:
 
-- Tên app: `node_bot_template`
+- Tên app: `teletok_bot`
 - Script: `./src/index.js`
 
 Chạy bằng:
@@ -66,15 +108,30 @@ Chạy bằng:
 npm run pm2
 ```
 
-Trên Windows, có thể xuất hiện lỗi lặp lại như `Error: spawn wmic ENOENT`. Thường đây là lỗi vô hại (PM2 cố đọc CPU/memory qua `wmic`). Nếu thấy phiền, bạn chỉ cần dùng `npm start` thay vì PM2.
+Trên Windows có thể xuất hiện lỗi lặp `Error: spawn wmic ENOENT`. Thường đây là lỗi vô hại (PM2 cố đọc CPU/memory qua `wmic`). Nếu thấy phiền, chỉ cần dùng `npm start` thay cho PM2.
 
-### Mở rộng template
+### Docker / Docker Compose
 
-- Đặt toàn bộ logic chính vào `runJobOnce()` trong `src/index.js` (gọi API, gửi message, xử lý queue, v.v.).
-- Khi logic lớn dần, bạn có thể:
-  - Tách thành module riêng, ví dụ `src/jobs/my-job.js`, rồi import và gọi từ `src/index.js`.
-  - Thêm các client trong `src/clients/` (ví dụ `telegram`, `http`, `tiktok`) và dùng `withRetry` để tăng độ ổn định.
-  - Dùng `DATA_DIR` trong `src/config/index.js` cho các file state bạn cần lưu.
+Bạn cũng có thể chạy Teletok trong container. `Dockerfile` đi kèm sẽ:
 
-Repo này được giữ cố ý nhỏ gọn để bạn tùy biến theo đúng use case bot của mình.
+- Dùng base image `node:20-slim`.
+- Cài `yt-dlp` (binary từ GitHub), `ffmpeg` và `python3`.
+- Cài dependency production và chạy `src/index.js`.
+
+Build và chạy trực tiếp với Docker:
+
+```bash
+docker build -t teletok-bot .
+docker run --rm -d --name teletok \
+  --env-file .env \
+  teletok-bot
+```
+
+Hoặc dùng Docker Compose (khuyến nghị cho server):
+
+```bash
+docker compose up -d --build
+```
+
+File compose sẽ đọc biến môi trường từ `.env`, nên nhớ cấu hình `.env` trước khi chạy.
 

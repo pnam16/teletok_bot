@@ -1,0 +1,10 @@
+services:
+  teletok:
+    build: .
+    container_name: teletok-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    # If you need to inspect logs or attach a shell:
+    # command: ["node", "src/index.js"]
+

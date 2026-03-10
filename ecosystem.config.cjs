@@ -26,7 +26,7 @@ module.exports = {
       max_restarts: 10, // Maximum number of restarts
       merge_logs: true,
       min_uptime: "10s", // Minimum uptime before considering restart successful
-      name: "node_bot_template",
+      name: "teletok_bot",
       out_file: "./logs/output.log",
       restart_delay: 4000, // Delay between restarts
       script: "./src/index.js",

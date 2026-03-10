@@ -1,7 +1,7 @@
 {
-  "name": "node-bot-template",
+  "name": "teletok-bot",
   "version": "1.0.0",
-  "description": "Minimal Node.js bot template with dotenv, interval loop, and optional PM2 process manager",
+  "description": "Teletok: Telegram bot that reuploads TikTok videos into a chat",
   "main": "src/index.js",
   "type": "module",
   "scripts": {
