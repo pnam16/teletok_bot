@@ -1,0 +1,24 @@
+{
+  "name": "node-bot-template",
+  "version": "1.0.0",
+  "description": "Minimal Node.js bot template with dotenv, interval loop, and optional PM2 process manager",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "check": "node src/index.js --once",
+    "lint": "pnpm exec biome check --write",
+    "pm2": "pm2 start ecosystem.config.cjs --update-env"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.6"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

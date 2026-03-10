@@ -1,0 +1,38 @@
+---
+description: JavaScript style and return conventions for the project
+globs: "**/*.js"
+alwaysApply: false
+---
+
+# JavaScript Style
+
+## No inline return
+
+Do not put `return` on the same line as a condition. Use a block with the return on its own line.
+
+```javascript
+// BAD
+if (stateLoaded) return;
+if (env > 0) return env;
+if (prices.length === 0) return null;
+
+// GOOD
+if (stateLoaded) {
+  return;
+}
+if (env > 0) {
+  return env;
+}
+if (prices.length === 0) {
+  return null;
+}
+```
+
+## Project structure
+
+- **config/** – Constants and paths only.
+- **lib/** – Shared state and pure helpers (format, state).
+- **clients/** – External API wrappers (Bybit, Telegram); no app logic.
+- **jobs/** – Use cases / orchestration (e.g. P2P check).
+
+Use `src/config`, `src/lib`, `src/clients`, `src/jobs` for imports; avoid barrel files that mix concerns.
