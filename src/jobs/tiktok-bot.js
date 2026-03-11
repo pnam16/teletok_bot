@@ -86,6 +86,68 @@ const handleShortVideoMessage = async (message, url, source) => {
   }
 };
 
+/** Process a single Telegram update. Used by both long-poll and webhook. */
+export const processUpdate = async (update) => {
+  const message = update.message ?? update.edited_message;
+  if (!message) return;
+
+  const text = (message.text ?? message.caption ?? "").trim();
+  const chat = message.chat;
+  const chatId = chat?.id;
+
+  if (
+    chatId &&
+    [PANIC_COMMAND, REMOVE_COMMAND].includes(text) &&
+    message.reply_to_message
+  ) {
+    const replied = message.reply_to_message;
+    const targetId = replied.message_id;
+    const isBotMessage = replied.from?.is_bot === true;
+
+    if (!isBotMessage) {
+      try {
+        await sendTextMessage({
+          chatId,
+          replyToMessageId: message.message_id,
+          text: "Chỉ có thể xoá tin do bot gửi. Reply vào tin video reup của bot rồi gửi lại /panic.",
+        });
+      } catch (e) {
+        console.error(
+          new Date().toISOString(),
+          "Failed to send 'bot-only' hint:",
+          e,
+        );
+      }
+      return;
+    }
+
+    try {
+      await deleteMessage({chatId, messageId: targetId});
+    } catch (err) {
+      console.error(new Date().toISOString(), "Failed to delete message:", err);
+      try {
+        await sendTextMessage({
+          chatId,
+          replyToMessageId: message.message_id,
+          text: "Lỗi xoá tin nhắn.",
+        });
+      } catch (notifyErr) {
+        console.error(
+          new Date().toISOString(),
+          "Failed to send error message:",
+          notifyErr,
+        );
+      }
+    }
+    return;
+  }
+
+  const link = extractShortVideoLink(text);
+  if (!link) return;
+
+  await handleShortVideoMessage(message, link.url, link.source);
+};
+
 export const runTikTokBot = async ({runOnce = false} = {}) => {
   let offset;
 
@@ -103,77 +165,10 @@ export const runTikTokBot = async ({runOnce = false} = {}) => {
 
   const CONCURRENCY = 2;
 
-  const processOneUpdate = async (update) => {
-    const message = update.message ?? update.edited_message;
-    if (!message) {
-      return;
-    }
-
-    const text = (message.text ?? message.caption ?? "").trim();
-    const chat = message.chat;
-    const chatId = chat?.id;
-
-    if (
-      chatId &&
-      [PANIC_COMMAND, REMOVE_COMMAND].includes(text) &&
-      message.reply_to_message
-    ) {
-      const replied = message.reply_to_message;
-      const targetId = replied.message_id;
-      const isBotMessage = replied.from?.is_bot === true;
-
-      if (!isBotMessage) {
-        try {
-          await sendTextMessage({
-            chatId,
-            replyToMessageId: message.message_id,
-            text: "Chỉ có thể xoá tin do bot gửi. Reply vào tin video reup của bot rồi gửi lại /panic.",
-          });
-        } catch (e) {
-          console.error(
-            new Date().toISOString(),
-            "Failed to send 'bot-only' hint:",
-            e,
-          );
-        }
-        return;
-      }
-
-      try {
-        await deleteMessage({chatId, messageId: targetId});
-      } catch (err) {
-        console.error(
-          new Date().toISOString(),
-          "Failed to delete message:",
-          err,
-        );
-        try {
-          await sendTextMessage({
-            chatId,
-            replyToMessageId: message.message_id,
-            text: "Lỗi xoá tin nhắn.",
-          });
-        } catch (notifyErr) {
-          console.error(
-            new Date().toISOString(),
-            "Failed to send error message:",
-            notifyErr,
-          );
-        }
-      }
-      return;
-    }
-
-    const link = extractShortVideoLink(text);
-    if (!link) return;
-
-    await handleShortVideoMessage(message, link.url, link.source);
-  };
-
   const processWithConcurrency = async (updates) => {
     const run = async (idx) => {
       if (idx >= updates.length) return;
-      await processOneUpdate(updates[idx]);
+      await processUpdate(updates[idx]);
       await run(idx + CONCURRENCY);
     };
     await Promise.all(

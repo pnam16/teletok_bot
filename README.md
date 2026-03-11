@@ -8,12 +8,12 @@ Teletok is a Node.js bot that listens in a Telegram chat, detects TikTok links, 
 
 - **Entry point**: `src/index.js`
   - Loads environment variables from `.env` via `dotenv/config`.
-  - Starts the TikTok bot loop by calling `runTikTokBot()` from `src/jobs/tiktok-bot.js`.
-  - Supports `--once` to process a single long-poll cycle and exit (useful for testing).
+  - If `TELEGRAM_WEBHOOK_URL` is set, runs in **webhook mode**: registers the webhook with Telegram and starts an HTTP server that receives POSTs. Otherwise runs in **long-poll mode**: calls `runTikTokBot()` and polls `getUpdates`.
+  - Supports `--once` in long-poll mode (one cycle then exit).
 
 - **Job**: `src/jobs/tiktok-bot.js`
-  - Long-polls Telegram's `getUpdates` API.
-  - For each incoming message (or edited message), extracts the first TikTok URL.
+  - Long-poll: repeatedly calls Telegram's `getUpdates` API. Webhook: each incoming POST body is one update, processed the same way.
+  - For each incoming message (or edited message), extracts the first short-video URL (TikTok, YouTube Shorts, Instagram Reels).
   - Downloads the TikTok video, reuploads it as a video message (reply to the original), cleans up temp files; on failure, sends a short error message.
 
 - **Clients**:
@@ -30,9 +30,10 @@ Teletok is a Node.js bot that listens in a Telegram chat, detects TikTok links, 
 
 | Path | Purpose |
 |------|---------|
-| `src/index.js` | Entry point; starts `runTikTokBot()`. |
-| `src/jobs/tiktok-bot.js` | Long-poll loop, URL extraction, download + reupload. |
-| `src/clients/telegram.js` | Telegram Bot API: `getUpdates`, `sendTextMessage`, `sendVideo`. |
+| `src/index.js` | Entry point; webhook or long-poll. |
+| `src/jobs/tiktok-bot.js` | Update processing, URL extraction, download + reupload. |
+| `src/server/webhook.js` | HTTP server for webhook mode (POST `/webhook`). |
+| `src/clients/telegram.js` | Telegram Bot API: `getUpdates`, `setWebhook`, `sendMessage`, `sendVideo`. |
 | `src/clients/tiktok.js` | Runs external downloader (yt-dlp), temp dir + cleanup. |
 | `src/config/index.js` | `DATA_DIR`. |
 | `src/lib/retry.js` | `withRetry()`. |
@@ -65,6 +66,8 @@ Teletok is a Node.js bot that listens in a Telegram chat, detects TikTok links, 
 
    Install [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) (recommended) or another CLI that can download TikTok videos, and make sure it is on your `PATH`.
 
+   **YouTube / JS runtime:** For YouTube (and Shorts), yt-dlp may warn *“No supported JavaScript runtime could be found”* and some formats can be missing. To fix this, set `TIKTOK_DOWNLOADER_JS_RUNTIMES=node` in `.env`. The bot will then call yt-dlp with `--js-runtimes node:<path-to-node>`, using the same Node that runs the bot. No extra install is needed when the app already runs on Node (e.g. in Docker the image has both Node and yt-dlp).
+
 3. **Configure environment**
 
    Copy `.env.example` to `.env` and adjust values:
@@ -77,8 +80,13 @@ Teletok is a Node.js bot that listens in a Telegram chat, detects TikTok links, 
 
    - `NODE_ENV` – optional; defaults to `development`.
    - `TELEGRAM_BOT_TOKEN` – bot token from `@BotFather`.
+  - **Webhook (optional):** If you run behind a reverse proxy or want webhook instead of long-poll:
+    - `TELEGRAM_WEBHOOK_URL` – base URL Telegram will POST to (e.g. `https://your-domain.com`). The bot registers `{TELEGRAM_WEBHOOK_URL}/webhook`. Must be HTTPS in production.
+    - `WEBHOOK_PORT` – port the HTTP server listens on (default `3000`). Use with a reverse proxy (e.g. nginx, Caddy) that forwards to this port.
+    - `WEBHOOK_SECRET` – optional; if set, Telegram must send the same value in `X-Telegram-Bot-Api-Secret-Token` header.
   - `TIKTOK_DOWNLOADER_BIN` – optional; path to downloader binary (default: `yt-dlp`).
-  - `TIKTOK_DOWNLOADER_ARGS` – optional; extra CLI args (split on spaces), defaults to `-o %(id)s.%(ext)s`. The bot will still prefer `.mp4` when picking the downloaded file, but you can set a custom `-f` if you know which formats are available for your targets.
+  - `TIKTOK_DOWNLOADER_ARGS` – optional; extra CLI args (split on spaces), defaults to `-o %(id)s.%(ext)s --merge-output-format mp4` so yt-dlp merges into MP4 when possible (better for Telegram). The bot still prefers `.mp4` when choosing the file to send.
+  - `TIKTOK_DOWNLOADER_JS_RUNTIMES` – optional; set to `node` to use Node as yt-dlp’s JS runtime. Reduces the *“No supported JavaScript runtime”* warning and can improve YouTube format availability. The bot passes the same Node executable it runs with. See [yt-dlp EJS wiki](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
 
 4. **Add bot to Telegram chat**
 
@@ -96,6 +104,8 @@ Teletok is a Node.js bot that listens in a Telegram chat, detects TikTok links, 
    ```
 
    You can also use `pnpm` instead of `npm` if you prefer.
+
+**Webhook mode:** Set `TELEGRAM_WEBHOOK_URL` (e.g. `https://your-domain.com`) and optionally `WEBHOOK_PORT` (default `3000`), then start the bot. It will register `{TELEGRAM_WEBHOOK_URL}/webhook` with Telegram and listen for POSTs. Put a reverse proxy (nginx, Caddy, etc.) in front with HTTPS and proxy `/webhook` to `http://localhost:WEBHOOK_PORT`. Telegram requires HTTPS for webhooks.
 
 ### PM2 (optional, bare-metal)
 

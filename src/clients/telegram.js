@@ -55,6 +55,17 @@ export const getUpdates = async ({offset, timeoutSeconds = 25} = {}) => {
   return [];
 };
 
+export const setWebhook = async ({url, secretToken} = {}) => {
+  if (!url) throw new Error("url is required for setWebhook");
+  const body = {url};
+  if (secretToken) body.secret_token = secretToken;
+  await requestJson("setWebhook", body);
+};
+
+export const deleteWebhook = async () => {
+  await requestJson("deleteWebhook", {});
+};
+
 export const sendChatAction = async ({chatId, action}) => {
   if (!chatId) {
     throw new Error("chatId is required");

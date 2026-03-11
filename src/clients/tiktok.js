@@ -31,11 +31,20 @@ export const downloadShortVideo = async (url) => {
   }
 
   const bin = process.env.TIKTOK_DOWNLOADER_BIN || "yt-dlp";
-  const rawArgs = process.env.TIKTOK_DOWNLOADER_ARGS || "-o %(id)s.%(ext)s";
+  const rawArgs =
+    process.env.TIKTOK_DOWNLOADER_ARGS ||
+    "-o %(id)s.%(ext)s --merge-output-format mp4";
   const args = rawArgs
     .split(" ")
     .map((part) => part.trim())
     .filter((part) => part.length > 0);
+
+  const jsRuntime = process.env.TIKTOK_DOWNLOADER_JS_RUNTIMES;
+  if (jsRuntime) {
+    const nodePath = process.execPath;
+    args.unshift("--js-runtimes", `${jsRuntime}:${nodePath}`);
+  }
+
   args.push(url);
 
   const dir = await createTempDir();
