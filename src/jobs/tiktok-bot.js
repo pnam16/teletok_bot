@@ -6,6 +6,8 @@ import {
   sendVideo,
 } from "../clients/telegram.js";
 import {downloadShortVideo} from "../clients/tiktok.js";
+import {getCachedVideoPath, storeCachedVideo} from "../lib/cache.js";
+import {hashUrl, normalizeUrl} from "../lib/dedup.js";
 
 const SHORT_VIDEO_PATTERNS = [
   {
@@ -44,7 +46,7 @@ const extractShortVideoLink = (text) => {
   return null;
 };
 
-const handleShortVideoMessage = async (message, url, source) => {
+const handleShortVideoMessage = async (message, url, source, urlHash) => {
   const chat = message.chat;
   if (!chat || !chat.id) return;
 
@@ -53,7 +55,13 @@ const handleShortVideoMessage = async (message, url, source) => {
 
   try {
     await sendChatAction({action: "upload_video", chatId});
-    const {filePath, cleanup} = await downloadShortVideo(url);
+    let cleanup = null;
+    let filePath = await getCachedVideoPath(urlHash);
+    if (!filePath) {
+      const downloaded = await downloadShortVideo(url);
+      filePath = await storeCachedVideo(downloaded.filePath, urlHash);
+      cleanup = downloaded.cleanup;
+    }
     try {
       await sendVideo({
         caption: `Reup từ ${source}`,
@@ -145,7 +153,12 @@ export const processUpdate = async (update) => {
   const link = extractShortVideoLink(text);
   if (!link) return;
 
-  await handleShortVideoMessage(message, link.url, link.source);
+  const normalized = normalizeUrl(link.url);
+  const urlHash = hashUrl(normalized);
+
+  // Global dedup: always process so we can reup from cache (DATA_DIR/cache) when available.
+  // First time: cache miss → download, store, reup. Later (same URL, any chat): cache hit → reup from cache only.
+  await handleShortVideoMessage(message, link.url, link.source, urlHash);
 };
 
 export const runTikTokBot = async ({runOnce = false} = {}) => {

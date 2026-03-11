@@ -1,53 +1,66 @@
 ## Teletok – TikTok Telegram Reupload Bot (Tiếng Việt)
 
-Teletok là bot Node.js nghe trong nhóm Telegram, tự phát hiện link TikTok, tải video về bằng CLI ngoài (ví dụ `yt-dlp`), reup lại video vào chính nhóm và xoá file tạm trên máy.
+Teletok là bot Node.js nghe trong nhóm/kênh Telegram, tự phát hiện link video ngắn (TikTok, YouTube Shorts, Instagram Reels), tải video bằng CLI ngoài (ví dụ `yt-dlp`), reup vào chính chat và xoá file tạm. Hỗ trợ long‑poll và webhook.
 
-> Lưu ý: Khi dùng bất kỳ tool tải TikTok nào, bạn tự chịu trách nhiệm tuân thủ điều khoản của TikTok và luật tại nơi bạn sống.
+> Lưu ý: Bạn tự chịu trách nhiệm tuân thủ điều khoản từng nền tảng và luật địa phương khi dùng tool tải.
 
 ### Cách hoạt động
 
 - **Entry point**: `src/index.js`
-  - Load biến môi trường từ `.env` thông qua `dotenv/config`.
-  - Gọi `runTikTokBot()` từ `src/jobs/tiktok-bot.js` để khởi động vòng lặp bot.
-  - Hỗ trợ tham số `--once` để chạy một vòng poll rồi thoát (hữu ích khi debug).
+  - Load `.env` ngay từ đầu (`dotenv/config`); log dòng `Data dir (cache + dedup):` cùng `DATA_DIR` khi khởi động.
+  - Nếu có `TELEGRAM_WEBHOOK_URL` → chế độ **webhook**: đăng ký webhook và chạy HTTP server nhận POST.
+  - Nếu không → chế độ **long‑poll**: gọi `runTikTokBot()` từ `src/jobs/tiktok-bot.js`, poll `getUpdates`.
+  - Hỗ trợ `--once` (một vòng poll rồi thoát) để debug/health check.
 
 - **Job**: `src/jobs/tiktok-bot.js`
-  - Long-poll API `getUpdates` của Telegram.
-  - Với mỗi message (hoặc edited message), trích link TikTok đầu tiên trong nội dung.
-  - Tải video TikTok, reup lại dưới dạng video reply vào message gốc và dọn file tạm; nếu lỗi thì gửi tin nhắn lỗi ngắn.
+  - Long‑poll: gọi `getUpdates` (timeout 25s), xử lý mỗi lô với đồng thời tối đa 2 update. Webhook: mỗi POST body là một update, cùng hàm `processUpdate`.
+  - Với mỗi message (hoặc edited), trích URL video ngắn đầu tiên (TikTok, YouTube Shorts, Instagram Reels).
+  - Chuẩn hoá URL, hash làm key cache; tìm trong `DATA_DIR/cache` theo hash, có thì reup từ cache, không thì tải rồi lưu cache rồi reup. Cùng URL mọi chat đều reup từ cache (một lần tải mỗi URL).
+  - Gửi trạng thái “uploading video”, rồi gửi video (reply) kèm caption `Reup từ {source}`, hoặc tin nhắn lỗi ngắn (tiếng Việt).
+  - **Xoá tin reup:** Reply vào tin video do bot gửi với `/panic` hoặc `/remove` để xoá tin đó (chỉ áp dụng tin do bot gửi).
 
-- **Clients**:
-  - `src/clients/telegram.js` – wrapper mỏng cho Telegram Bot API:
-    - `getUpdates`, `sendTextMessage`, `sendVideo`.
-  - `src/clients/tiktok.js` – helper tải TikTok:
-    - Gọi CLI ngoài (mặc định `yt-dlp`), lưu video vào thư mục tạm, trả về `{filePath, cleanup}`.
+- **Clients**: `src/clients/telegram.js` (getUpdates, setWebhook, deleteWebhook, sendChatAction, sendTextMessage, sendVideo, deleteMessage; axios + withRetry), `src/clients/tiktok.js` (spawn yt-dlp hoặc CLI khác, thư mục tạm, trả về `{filePath, cleanup}`).
 
 - **Config & helpers**:
-  - `src/config/index.js` – hằng `DATA_DIR` (hiện chưa dùng, để dành cho state về sau).
-  - `src/lib/retry.js` – helper `withRetry(fn, options)` để retry các thao tác async khi lỗi tạm thời.
+  - `src/config/index.js` – `DATA_DIR` (mặc định `./data`), bỏ dấu ngoặc và chuẩn hoá đường dẫn (Windows).
+  - `src/lib/dedup.js` – chỉ dùng cho key cache: `normalizeUrl()`, `hashUrl()`.
+  - `src/lib/cache.js` – cache video trong `DATA_DIR/cache` (key theo hash), giới hạn `CACHE_MAX_MB`, xóa file cũ nhất khi vượt. Trên Windows nếu `rename()` lỗi thì copy rồi xóa file tạm.
+  - `src/lib/retry.js` – `withRetry()`. `src/server/webhook.js` – server webhook (POST `/webhook`, secret token, parse JSON tối đa ~512 KB, trả `{}` nhanh rồi xử lý update bất đồng bộ).
 
 ### Cấu trúc project
 
 | Đường dẫn | Mục đích |
 |-----------|----------|
-| `src/index.js` | Entry point; gọi `runTikTokBot()`. |
-| `src/jobs/tiktok-bot.js` | Vòng long-poll, trích URL, tải + reup. |
-| `src/clients/telegram.js` | Telegram Bot API: `getUpdates`, `sendTextMessage`, `sendVideo`. |
-| `src/clients/tiktok.js` | Chạy downloader ngoài (yt-dlp), thư mục tạm + cleanup. |
-| `src/config/index.js` | `DATA_DIR`. |
-| `src/lib/retry.js` | `withRetry()`. |
-| `ecosystem.config.cjs` | Cấu hình PM2 (`teletok_bot`). |
-| `Dockerfile` / `docker-compose.yml` | Build và chạy container. |
-| `scripts/pm2-resurrect.sh` | PM2 resurrect + start + save (ví dụ lúc login). |
+| `src/index.js` | Entry point; chọn webhook hoặc long‑poll, log DATA_DIR. |
+| `src/jobs/tiktok-bot.js` | Xử lý update, trích URL, tra cache, tải + reup. |
+| `src/server/webhook.js` | HTTP server webhook: `createWebhookServer`, `runWebhookServer`; POST `/webhook`, secret token tùy chọn. |
+| `src/clients/telegram.js` | Telegram Bot API client (getUpdates, webhook, gửi/xoá tin nhắn, upload video). |
+| `src/clients/tiktok.js` | Chạy downloader ngoài, temp + cleanup. |
+| `src/config/index.js` | DATA_DIR. |
+| `src/lib/dedup.js` | URL helpers: normalizeUrl, hashUrl (key cache). |
+| `src/lib/cache.js` | Cache video, giới hạn dung lượng. |
+| `src/lib/retry.js` | withRetry(). |
+| `build.mjs` | Script esbuild; output `dist/index.js` (chạy qua `npm run build`). |
+| `pnpm-lock.yaml` | Lockfile; Docker build dùng `pnpm install --frozen-lockfile`. |
+| `biome.json` | Cấu hình Biome lint/format (`npm run lint`). |
+| `ecosystem.config.cjs` | PM2 (`teletok_bot`). |
+| `Dockerfile` / `docker-compose.yml` | Build và chạy container; volume DATA_DIR. |
+| `scripts/pm2-resurrect.sh` | PM2 resurrect + start + save. |
 
 ### Scripts
 
+Các script trong `package.json`, chạy bằng `npm` hoặc `pnpm`:
+
 | Script | Mô tả |
-|--------|--------|
-| `npm start` | Chạy bot (vòng long-poll). |
-| `npm run check` | Chạy một vòng poll rồi thoát. |
-| `npm run lint` | Biome check và fix. |
+|--------|-------|
+| `npm run build` | Bundle esbuild ra `dist/index.js`. |
+| `npm run dev` | Chạy từ source (`src/index.js`). |
+| `npm run check` | Một vòng poll rồi thoát. |
+| `npm run docker` | `docker compose up -d --build`. |
+| `npm run lint` | Biome check --write. |
 | `npm run pm2` | Chạy bằng PM2. |
+| `npm start` | Chạy bundle `dist/index.js` (cần build trước hoặc Docker). |
+| `npm run start:envfile` | Chạy bundle với `node --env-file=.env dist/index.js`. |
 
 ### Cài đặt
 
@@ -59,9 +72,11 @@ Teletok là bot Node.js nghe trong nhóm Telegram, tự phát hiện link TikTok
    pnpm install
    ```
 
-2. **Cài CLI tải TikTok**
+2. **Cài CLI tải video ngắn**
 
-   Cài [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) (khuyến nghị) hoặc CLI khác có thể tải video TikTok, và đảm bảo nó nằm trong `PATH`.
+   Cài [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) (khuyến nghị) hoặc CLI khác tải được TikTok/Shorts/Reels, và đảm bảo nó nằm trong `PATH`.
+
+   **YouTube / JS runtime:** Với YouTube (và Shorts), yt‑dlp có thể báo *“No supported JavaScript runtime could be found”* và thiếu format. Đặt `TIKTOK_DOWNLOADER_JS_RUNTIMES=node` trong `.env` để bot gọi yt‑dlp kèm `--js-runtimes node:<đường-dẫn-node>`, dùng chính Node đang chạy bot. Trong Docker image đã có sẵn Node và yt‑dlp.
 
 3. **Cấu hình environment**
 
@@ -71,12 +86,12 @@ Teletok là bot Node.js nghe trong nhóm Telegram, tự phát hiện link TikTok
    cp .env.example .env
    ```
 
-   Các biến:
+   Các biến chính (xem `.env.example`):
 
-   - `NODE_ENV` – tùy chọn, mặc định `development`.
-   - `TELEGRAM_BOT_TOKEN` – token bot lấy từ `@BotFather`.
-   - `TIKTOK_DOWNLOADER_BIN` – tùy chọn, path tới binary downloader (mặc định `yt-dlp`).
-   - `TIKTOK_DOWNLOADER_ARGS` – tùy chọn, thêm tham số CLI (tách bằng space), mặc định `-o %(id)s.%(ext)s`.
+   - `NODE_ENV`, `TELEGRAM_BOT_TOKEN`.
+   - Webhook (tuỳ chọn): `TELEGRAM_WEBHOOK_URL`, `WEBHOOK_PORT`, `WEBHOOK_SECRET`.
+   - Downloader: `TIKTOK_DOWNLOADER_BIN`, `TIKTOK_DOWNLOADER_ARGS`, `TIKTOK_DOWNLOADER_JS_RUNTIMES`.
+   - Cache: `DATA_DIR` (mặc định `./data`; cache trong `DATA_DIR/cache`; trên Docker thì `DATA_DIR` trong `.env` là **đường dẫn host** cho volume, container dùng `/app/data`), `CACHE_MAX_MB`.
 
 4. **Thêm bot vào nhóm Telegram**
 
@@ -86,14 +101,13 @@ Teletok là bot Node.js nghe trong nhóm Telegram, tự phát hiện link TikTok
 5. **Chạy bot bằng Node**
 
    ```bash
-   # Chạy liên tục (long-polling loop)
+   npm run build
    npm start
-
-   # Chạy một vòng poll rồi thoát (debug)
-   npm run check
+   # hoặc từ source: npm run dev
+   # một vòng rồi thoát: npm run check
    ```
 
-   Bạn có thể dùng `pnpm` thay cho `npm` nếu quen.
+   Có thể dùng `pnpm` thay `npm`. Webhook: set `TELEGRAM_WEBHOOK_URL`, chạy bot, cấu hình reverse proxy HTTPS trỏ `/webhook` về port (mặc định 3000).
 
 ### PM2 (tùy chọn, chạy trực tiếp trên máy)
 
@@ -112,26 +126,20 @@ Trên Windows có thể xuất hiện lỗi lặp `Error: spawn wmic ENOENT`. Th
 
 ### Docker / Docker Compose
 
-Bạn cũng có thể chạy Teletok trong container. `Dockerfile` đi kèm sẽ:
+Chạy Teletok trong container: `Dockerfile` hai stage—builder chạy `pnpm run build` (esbuild → `dist/index.js`); image chạy dùng `node:20-slim`, cài `yt-dlp`, `ffmpeg`, `python3`, cài dependency prod bằng pnpm, copy `dist/`, chạy `node dist/index.js`.
 
-- Dùng base image `node:20-slim`.
-- Cài `yt-dlp` (binary từ GitHub), `ffmpeg` và `python3`.
-- Cài dependency production và chạy `src/index.js`.
-
-Build và chạy trực tiếp với Docker:
-
-```bash
-docker build -t teletok-bot .
-docker run --rm -d --name teletok \
-  --env-file .env \
-  teletok-bot
-```
-
-Hoặc dùng Docker Compose (khuyến nghị cho server):
+**Compose:** `docker-compose.yml` dùng `env_file: .env`, ghi đè `DATA_DIR=/app/data` trong container để ghi cache vào volume đã mount, và mount thư mục host vào `/app/data`. Đường dẫn host lấy từ `DATA_DIR` trong `.env` (mặc định `./data`). Cache trên host nằm trong `DATA_DIR/cache`. Mặc định không publish `ports`; webhook trong Docker thì thêm map port (ví dụ `3000:3000`) hoặc reverse proxy trên host.
 
 ```bash
 docker compose up -d --build
 ```
 
-File compose sẽ đọc biến môi trường từ `.env`, nên nhớ cấu hình `.env` trước khi chạy.
+Hoặc Docker thuần:
+
+```bash
+docker build -t teletok-bot .
+docker run --rm -d --name teletok --env-file .env -v ./data:/app/data teletok-bot
+```
+
+Cấu hình `.env` trước khi chạy.
 

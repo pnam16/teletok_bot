@@ -5,6 +5,10 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      # Override DATA_DIR so video cache is written inside container path that we mount to host
+      DATA_DIR: /app/data
+    volumes:
+      - "${DATA_DIR:-./data}:/app/data"
     # If you need to inspect logs or attach a shell:
     # command: ["node", "src/index.js"]
-

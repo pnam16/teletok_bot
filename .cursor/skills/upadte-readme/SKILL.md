@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Update README to Match Codebase
 
-When invoked with `/readme` or `cursor update @README.md match codebase`, perform a comprehensive analysis of the project and update README.md to accurately reflect the current codebase state. Use this skill in any project (apps, libraries, docs, knowledge vaults, etc.).
+When invoked with `/readme` or `cursor update @README.md match codebase`, perform a comprehensive analysis of the project and update both `README.md` and `README.vi.md` (when they exist) to accurately reflect the current codebase state. Use this skill in any project (apps, libraries, docs, knowledge vaults, etc.).
 
 ## Analysis Steps
 
@@ -67,7 +67,7 @@ When invoked with `/readme` or `cursor update @README.md match codebase`, perfor
 
 ## Output
 
-Update README.md in place, ensuring:
+Update `README.md` (and `README.vi.md` if present) in place, ensuring:
 
 - All information is accurate and current
 - Project structure matches the actual repo layout
