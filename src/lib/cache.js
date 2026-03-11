@@ -15,6 +15,23 @@ const getMaxBytes = () => {
 };
 
 const ensureDir = async () => {
+  // Ensure DATA_DIR itself exists and is a directory before creating cache/.
+  try {
+    const info = await stat(DATA_DIR);
+    if (!info.isDirectory()) {
+      throw new Error(
+        `DATA_DIR path exists but is not a directory: ${DATA_DIR}`,
+      );
+    }
+  } catch (err) {
+    // If DATA_DIR does not exist, create it; otherwise rethrow.
+    if (err && err.code === "ENOENT") {
+      await mkdir(DATA_DIR, {recursive: true});
+    } else if (err) {
+      throw err;
+    }
+  }
+
   const dir = getCacheDir();
   await mkdir(dir, {recursive: true});
   return dir;
