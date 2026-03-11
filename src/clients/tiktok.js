@@ -25,9 +25,9 @@ const waitForProcess = (child, cwd) =>
     });
   });
 
-export const downloadTikTokVideo = async (url) => {
+export const downloadShortVideo = async (url) => {
   if (!url) {
-    throw new Error("TikTok URL is required");
+    throw new Error("Video URL is required");
   }
 
   const bin = process.env.TIKTOK_DOWNLOADER_BIN || "yt-dlp";
@@ -47,7 +47,9 @@ export const downloadTikTokVideo = async (url) => {
   await waitForProcess(child, dir);
 
   const entries = await readdir(dir);
-  const videoFile = entries.find((name) => VIDEO_EXT_PATTERN.test(name));
+  const mp4File = entries.find((name) => name.toLowerCase().endsWith(".mp4"));
+  const videoFile =
+    mp4File ?? entries.find((name) => VIDEO_EXT_PATTERN.test(name));
   if (!videoFile) {
     throw new Error("No video file found after download");
   }

@@ -55,6 +55,16 @@ export const getUpdates = async ({offset, timeoutSeconds = 25} = {}) => {
   return [];
 };
 
+export const sendChatAction = async ({chatId, action}) => {
+  if (!chatId) {
+    throw new Error("chatId is required");
+  }
+  await requestJson("sendChatAction", {
+    action,
+    chat_id: chatId,
+  });
+};
+
 export const deleteMessage = async ({chatId, messageId}) => {
   if (!chatId) {
     throw new Error("chatId is required");

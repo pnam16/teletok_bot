@@ -77,8 +77,8 @@ Teletok is a Node.js bot that listens in a Telegram chat, detects TikTok links, 
 
    - `NODE_ENV` – optional; defaults to `development`.
    - `TELEGRAM_BOT_TOKEN` – bot token from `@BotFather`.
-   - `TIKTOK_DOWNLOADER_BIN` – optional; path to downloader binary (default: `yt-dlp`).
-   - `TIKTOK_DOWNLOADER_ARGS` – optional; extra CLI args (split on spaces), defaults to `-o %(id)s.%(ext)s`.
+  - `TIKTOK_DOWNLOADER_BIN` – optional; path to downloader binary (default: `yt-dlp`).
+  - `TIKTOK_DOWNLOADER_ARGS` – optional; extra CLI args (split on spaces), defaults to `-o %(id)s.%(ext)s`. The bot will still prefer `.mp4` when picking the downloaded file, but you can set a custom `-f` if you know which formats are available for your targets.
 
 4. **Add bot to Telegram chat**
 

@@ -1,12 +1,27 @@
 import {
   deleteMessage,
   getUpdates,
+  sendChatAction,
   sendTextMessage,
   sendVideo,
 } from "../clients/telegram.js";
-import {downloadTikTokVideo} from "../clients/tiktok.js";
+import {downloadShortVideo} from "../clients/tiktok.js";
 
-const TIKTOK_URL_REGEX = /https?:\/\/(?:www\.)?(?:vm\.|vt\.)?tiktok\.com\/\S+/i;
+const SHORT_VIDEO_PATTERNS = [
+  {
+    pattern: /https?:\/\/(?:www\.)?(?:vm\.|vt\.)?tiktok\.com\/[^\s]+/i,
+    source: "TikTok",
+  },
+  {
+    pattern:
+      /https?:\/\/(?:www\.)?youtube\.com\/shorts\/[^\s]+|https?:\/\/youtu\.be\/[^\s]+/i,
+    source: "YouTube Shorts",
+  },
+  {
+    pattern: /https?:\/\/(?:www\.)?instagram\.com\/reel\/[^\s]+/i,
+    source: "Instagram Reels",
+  },
+];
 
 const sleep = (ms) =>
   new Promise((resolve) => {
@@ -18,52 +33,48 @@ const sleep = (ms) =>
 const PANIC_COMMAND = "/panic";
 const REMOVE_COMMAND = "/remove";
 
-const extractTikTokUrl = (text) => {
-  if (!text) {
-    return null;
+const extractShortVideoLink = (text) => {
+  if (!text) return null;
+  for (const {pattern, source} of SHORT_VIDEO_PATTERNS) {
+    const match = text.match(pattern);
+    if (match) {
+      return {source, url: match[0]};
+    }
   }
-  const match = text.match(TIKTOK_URL_REGEX);
-  if (!match) {
-    return null;
-  }
-  return match[0];
+  return null;
 };
 
-const handleTikTokMessage = async (message, url) => {
+const handleShortVideoMessage = async (message, url, source) => {
   const chat = message.chat;
-  if (!chat || !chat.id) {
-    return;
-  }
+  if (!chat || !chat.id) return;
 
   const chatId = chat.id;
   const messageId = message.message_id;
 
   try {
-    const {filePath, cleanup} = await downloadTikTokVideo(url);
-
+    await sendChatAction({action: "upload_video", chatId});
+    const {filePath, cleanup} = await downloadShortVideo(url);
     try {
       await sendVideo({
-        caption: "Reup từ TikTok",
+        caption: `Reup từ ${source}`,
         chatId,
         filePath,
         replyToMessageId: messageId,
       });
     } finally {
-      if (typeof cleanup === "function") {
-        await cleanup();
-      }
+      if (typeof cleanup === "function") await cleanup();
     }
   } catch (err) {
     console.error(
       new Date().toISOString(),
-      "Failed to process TikTok message:",
+      "Failed to process short video message:",
       err,
     );
     try {
       await sendTextMessage({
         chatId,
         replyToMessageId: messageId,
-        text: "Tải video TikTok thất bại, thử lại sau nha.",
+        text: "Tải video thất bại, thử lại sau nha.",
       });
     } catch (notifyErr) {
       console.error(
@@ -153,12 +164,10 @@ export const runTikTokBot = async ({runOnce = false} = {}) => {
       return;
     }
 
-    const url = extractTikTokUrl(text);
-    if (!url) {
-      return;
-    }
+    const link = extractShortVideoLink(text);
+    if (!link) return;
 
-    await handleTikTokMessage(message, url);
+    await handleShortVideoMessage(message, link.url, link.source);
   };
 
   const processWithConcurrency = async (updates) => {
