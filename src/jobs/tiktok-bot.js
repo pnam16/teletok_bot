@@ -4,6 +4,7 @@ import {
   sendChatAction,
   sendTextMessage,
   sendVideo,
+  TelegramFileTooLargeError,
 } from "../clients/telegram.js";
 import {downloadShortVideo} from "../clients/tiktok.js";
 import {getCachedVideoPath, storeCachedVideo} from "../lib/cache.js";
@@ -78,11 +79,16 @@ const handleShortVideoMessage = async (message, url, source, urlHash) => {
       "Failed to process short video message:",
       err,
     );
+    const isTooLarge =
+      err instanceof TelegramFileTooLargeError || err.response?.status === 413;
+    const userMessage = isTooLarge
+      ? "Video quá lớn (Telegram giới hạn 50MB), không thể gửi."
+      : "Tải video thất bại, thử lại sau nha.";
     try {
       await sendTextMessage({
         chatId,
         replyToMessageId: messageId,
-        text: "Tải video thất bại, thử lại sau nha.",
+        text: userMessage,
       });
     } catch (notifyErr) {
       console.error(

@@ -1,7 +1,13 @@
 import axios from "axios";
 import FormData from "form-data";
-import {createReadStream} from "fs";
+import {createReadStream, stat} from "fs";
 import {basename} from "path";
+import {promisify} from "util";
+
+const statAsync = promisify(stat);
+
+/** Telegram Bot API limit for sendVideo (and sendDocument) in bytes. */
+export const TELEGRAM_MAX_VIDEO_BYTES = 50 * 1024 * 1024; // 50 MB
 
 import {withRetry} from "../lib/retry.js";
 
@@ -103,6 +109,17 @@ export const sendTextMessage = async ({chatId, text, replyToMessageId}) => {
   await requestJson("sendMessage", body);
 };
 
+export class TelegramFileTooLargeError extends Error {
+  constructor(sizeBytes, limitBytes) {
+    super(
+      `Video size ${(sizeBytes / 1024 / 1024).toFixed(1)} MB exceeds Telegram limit of ${limitBytes / 1024 / 1024} MB`,
+    );
+    this.name = "TelegramFileTooLargeError";
+    this.sizeBytes = sizeBytes;
+    this.limitBytes = limitBytes;
+  }
+}
+
 export const sendVideo = async ({
   chatId,
   filePath,
@@ -114,6 +131,14 @@ export const sendVideo = async ({
   }
   if (!filePath) {
     throw new Error("filePath is required");
+  }
+
+  const stats = await statAsync(filePath);
+  if (stats.size > TELEGRAM_MAX_VIDEO_BYTES) {
+    throw new TelegramFileTooLargeError(
+      stats.size,
+      TELEGRAM_MAX_VIDEO_BYTES,
+    );
   }
 
   const token = getTelegramToken();
@@ -130,12 +155,24 @@ export const sendVideo = async ({
     form.append("reply_to_message_id", String(replyToMessageId));
   }
 
-  await withRetry(async () => {
-    await axios.post(url, form, {
-      headers: form.getHeaders(),
-      maxBodyLength: Number.POSITIVE_INFINITY,
-      maxContentLength: Number.POSITIVE_INFINITY,
-      timeout: TELEGRAM_VIDEO_UPLOAD_TIMEOUT_MS,
+  try {
+    await withRetry(async () => {
+      await axios.post(url, form, {
+        headers: form.getHeaders(),
+        maxBodyLength: Number.POSITIVE_INFINITY,
+        maxContentLength: Number.POSITIVE_INFINITY,
+        timeout: TELEGRAM_VIDEO_UPLOAD_TIMEOUT_MS,
+      });
     });
-  });
+  } catch (err) {
+    const status = err.response?.status;
+    const code = err.response?.data?.error_code;
+    if (status === 413 || code === 413) {
+      throw new TelegramFileTooLargeError(
+        stats.size,
+        TELEGRAM_MAX_VIDEO_BYTES,
+      );
+    }
+    throw err;
+  }
 };
