@@ -89,6 +89,10 @@ Các script trong `package.json`, chạy bằng `npm` hoặc `pnpm`:
    Các biến chính (xem `.env.example`):
 
    - `NODE_ENV`, `TELEGRAM_BOT_TOKEN`.
+   - **Endpoint & giới hạn Telegram Bot API:**
+     - `TELEGRAM_API_BASE` – tuỳ chọn; base URL cho Telegram Bot API. Mặc định (không đặt) là `https://api.telegram.org` với giới hạn upload 50 MB mỗi file.
+     - `TELEGRAM_MAX_VIDEO_MB` – tuỳ chọn; dung lượng tối đa (MB) mà bot sẽ cố upload. Mặc định `50`, trùng với giới hạn API chính thức. Khi dùng server Bot API tự host có thể tăng (ví dụ `2000`).
+     - `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` – **chỉ bắt buộc** khi chạy server Telegram Bot API tự host (xem phần Docker). Lấy tại [`https://my.telegram.org/apps`](https://my.telegram.org/apps).
    - Webhook (tuỳ chọn): `TELEGRAM_WEBHOOK_URL`, `WEBHOOK_PORT`, `WEBHOOK_SECRET`.
    - Downloader: `TIKTOK_DOWNLOADER_BIN`, `TIKTOK_DOWNLOADER_ARGS`, `TIKTOK_DOWNLOADER_JS_RUNTIMES`.
    - Cache: `DATA_DIR` (mặc định `./data`; cache trong `DATA_DIR/cache`; trên Docker thì `DATA_DIR` trong `.env` là **đường dẫn host** cho volume, container dùng `/app/data`), `CACHE_MAX_MB`.
@@ -128,7 +132,16 @@ Trên Windows có thể xuất hiện lỗi lặp `Error: spawn wmic ENOENT`. Th
 
 Chạy Teletok trong container: `Dockerfile` hai stage—builder chạy `pnpm run build` (esbuild → `dist/index.js`); image chạy dùng `node:20-slim`, cài `yt-dlp`, `ffmpeg`, `python3`, cài dependency prod bằng pnpm, copy `dist/`, chạy `node dist/index.js`.
 
-**Compose:** `docker-compose.yml` dùng `env_file: .env`, ghi đè `DATA_DIR=/app/data` trong container để ghi cache vào volume đã mount, và mount thư mục host vào `/app/data`. Đường dẫn host lấy từ `DATA_DIR` trong `.env` (mặc định `./data`). Cache trên host nằm trong `DATA_DIR/cache`. Mặc định không publish `ports`; webhook trong Docker thì thêm map port (ví dụ `3000:3000`) hoặc reverse proxy trên host.
+**Compose:** `docker-compose.yml` dùng `env_file: .env`, ghi đè `DATA_DIR=/app/data` trong container để ghi cache vào volume đã mount, và mount thư mục host vào `/app/data`. Đường dẫn host lấy từ `DATA_DIR` trong `.env` (mặc định `./data`). Cache trên host nằm trong `DATA_DIR/cache`.
+
+File compose cũng có sẵn một service Telegram Bot API tự host (tuỳ chọn):
+
+- Service `telegram-api` dùng image `aiogram/telegram-bot-api`, lắng trên port `8090`, lưu data dưới `./dist/telegram-bot-api-data`, và cần `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` trong `.env`.
+- Service `teletok` được cấu hình:
+  - `TELEGRAM_API_BASE=http://telegram-bot-api:8090` để bot gọi server local thay vì `https://api.telegram.org`.
+  - `TELEGRAM_MAX_VIDEO_MB=2000` để bot cố gắng upload video tới ~2 GB khi dùng API tự host (còn tuỳ giới hạn phía Telegram).
+
+Nếu **không** muốn chạy Telegram Bot API tự host, bạn có thể xoá service `telegram-api` và hai biến môi trường thêm vào trong service `teletok`; khi đó bot dùng lại API chính thức với giới hạn 50 MB.
 
 ```bash
 docker compose up -d --build

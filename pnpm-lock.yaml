@@ -9,20 +9,20 @@ importers:
   .:
     dependencies:
       axios:
-        specifier: ^1.7.9
+        specifier: ^1.13.6
         version: 1.13.6
       dotenv:
         specifier: ^16.6.1
         version: 16.6.1
       form-data:
-        specifier: ^4.0.1
+        specifier: ^4.0.5
         version: 4.0.5
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.4.6
         version: 2.4.6
       esbuild:
-        specifier: ^0.24.0
+        specifier: ^0.24.2
         version: 0.24.2
 
 packages:

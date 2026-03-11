@@ -97,8 +97,12 @@ Scripts are defined in `package.json` and can be run with `npm` or `pnpm`:
 
    Key variables (see `.env.example` for full list and comments):
 
-   - `NODE_ENV` – optional; defaults to `development`. Set to `production` for production builds (enables esbuild minification).
-   - `TELEGRAM_BOT_TOKEN` – bot token from `@BotFather`.
+  - `NODE_ENV` – optional; defaults to `development`. Set to `production` for production builds (enables esbuild minification).
+  - `TELEGRAM_BOT_TOKEN` – bot token from `@BotFather`.
+  - **Telegram Bot API endpoint & limits:**
+    - `TELEGRAM_API_BASE` – optional; base URL for Telegram Bot API. Default (unset) is `https://api.telegram.org` with a 50 MB per‑file upload limit.
+    - `TELEGRAM_MAX_VIDEO_MB` – optional; maximum video size (in MB) that this bot will attempt to upload. Default is `50`, matching the official Bot API limit. When using a self‑hosted Bot API server you can raise this (e.g. `2000`).
+    - `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` – **required only** when you run a self‑hosted Telegram Bot API server (see Docker section). Obtain them from [`https://my.telegram.org/apps`](https://my.telegram.org/apps).
    - **Webhook (optional):** to run in webhook mode behind a reverse proxy:
      - `TELEGRAM_WEBHOOK_URL` – base URL Telegram will POST to (e.g. `https://your-domain.com`). The bot registers `{TELEGRAM_WEBHOOK_URL}/webhook`. Must be HTTPS in production.
      - `WEBHOOK_PORT` – port the HTTP server listens on (default `3000`). Use with a reverse proxy (e.g. nginx, Caddy) that forwards to this port.
@@ -153,7 +157,16 @@ On Windows, you may see repeated PM2 errors like `Error: spawn wmic ENOENT`. The
 
 You can run Teletok inside a container. The `Dockerfile` is multi-stage: builder runs `pnpm run build` (esbuild → `dist/index.js`); runtime image uses `node:20-slim`, installs `yt-dlp`, `ffmpeg`, and `python3` via apt/curl, installs production deps with pnpm, copies `dist/`, and runs `node dist/index.js`.
 
-**Compose:** `docker-compose.yml` uses `env_file: .env`, sets `DATA_DIR=/app/data` in the container environment so writes go under the mounted volume, and mounts the host path to `/app/data`. The host path comes from `DATA_DIR` in your `.env` (default `./data`). Set `DATA_DIR` in `.env` to where you want the video cache on the host (e.g. `./data` or an absolute path); cache files live under `DATA_DIR/cache` on the host. Volume: `"${DATA_DIR:-./data}:/app/data"`. No `ports:` are published by default; for webhook mode in Docker, add a `ports` mapping (e.g. `3000:3000`) or use a reverse proxy on the host.
+**Compose:** `docker-compose.yml` uses `env_file: .env`, sets `DATA_DIR=/app/data` in the container environment so writes go under the mounted volume, and mounts the host path to `/app/data`. The host path comes from `DATA_DIR` in your `.env` (default `./data`). Set `DATA_DIR` in `.env` to where you want the video cache on the host (e.g. `./data` or an absolute path); cache files live under `DATA_DIR/cache` on the host. Volume: `"${DATA_DIR:-./data}:/app/data"`.
+
+The compose file also includes an optional self‑hosted Telegram Bot API server:
+
+- Service `telegram-api` uses the `aiogram/telegram-bot-api` image, listens on port `8090`, persists its data under `./dist/telegram-bot-api-data`, and requires `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` in `.env`.
+- Service `teletok` is configured with:
+  - `TELEGRAM_API_BASE=http://telegram-bot-api:8090` so the bot talks to the local server instead of `https://api.telegram.org`.
+  - `TELEGRAM_MAX_VIDEO_MB=2000` so the bot will attempt to upload videos up to ~2 GB when using the self‑hosted API (subject to Telegram’s server limits).
+
+If you **don’t** want a local Telegram Bot API server, you can remove the `telegram-api` service and the extra environment variables in the `teletok` service; the bot will fall back to the official Bot API (`https://api.telegram.org`) with a 50 MB upload limit.
 
 Build and run:
 

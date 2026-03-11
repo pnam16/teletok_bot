@@ -6,12 +6,24 @@ import {promisify} from "util";
 
 const statAsync = promisify(stat);
 
+const parseNumber = (value, fallback) => {
+  if (value == null || value === "") return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+
+const TELEGRAM_MAX_VIDEO_MB = parseNumber(
+  process.env.TELEGRAM_MAX_VIDEO_MB,
+  50,
+);
+
 /** Telegram Bot API limit for sendVideo (and sendDocument) in bytes. */
-export const TELEGRAM_MAX_VIDEO_BYTES = 50 * 1024 * 1024; // 50 MB
+export const TELEGRAM_MAX_VIDEO_BYTES = TELEGRAM_MAX_VIDEO_MB * 1024 * 1024;
 
 import {withRetry} from "../lib/retry.js";
 
-const TELEGRAM_API_BASE = "https://api.telegram.org";
+const TELEGRAM_API_BASE =
+  process.env.TELEGRAM_API_BASE || "https://api.telegram.org";
 const TELEGRAM_TIMEOUT_MS = 30_000;
 const TELEGRAM_VIDEO_UPLOAD_TIMEOUT_MS = 90_000;
 
