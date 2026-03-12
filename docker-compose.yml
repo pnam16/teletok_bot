@@ -3,6 +3,8 @@ services:
     build: .
     container_name: teletok-bot
     restart: unless-stopped
+    depends_on:
+      - telegram-api
     env_file:
       - .env
     environment:

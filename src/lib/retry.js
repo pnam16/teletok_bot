@@ -3,12 +3,19 @@ const DEFAULT_BASE_DELAY_MS = 500;
 
 const isRetryable = (err) => {
   const msg = err?.message ?? "";
+  const causeMsg = err?.cause?.message ?? "";
+  const code = err?.code ?? err?.cause?.code ?? "";
   if (
     msg.includes("fetch failed") ||
     msg.includes("ECONNRESET") ||
     msg.includes("ETIMEDOUT") ||
     msg.includes("timeout of") ||
-    msg.includes("Network Error")
+    msg.includes("Network Error") ||
+    msg.includes("socket hang up") ||
+    causeMsg.includes("ECONNRESET") ||
+    causeMsg.includes("socket hang up") ||
+    code === "ECONNRESET" ||
+    code === "ETIMEDOUT"
   ) {
     return true;
   }

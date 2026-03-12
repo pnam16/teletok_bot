@@ -18,11 +18,16 @@ const SHORT_VIDEO_PATTERNS = [
   {
     pattern:
       /https?:\/\/(?:www\.)?youtube\.com\/shorts\/[^\s]+|https?:\/\/youtu\.be\/[^\s]+/i,
-    source: "YouTube Shorts",
+    source: "YouTube",
   },
   {
     pattern: /https?:\/\/(?:www\.)?instagram\.com\/reel\/[^\s]+/i,
-    source: "Instagram Reels",
+    source: "Instagram",
+  },
+  {
+    pattern:
+      /https?:\/\/(?:www\.|m\.)?(?:facebook\.com|fb\.com|fb\.watch)\/(?:share\/r\/[^\s]+|reel\/[^\s]+|watch\/[^\s]+|[^\s]*\?v=\d+)/i,
+    source: "Facebook",
   },
 ];
 

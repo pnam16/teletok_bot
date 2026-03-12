@@ -147,10 +147,7 @@ export const sendVideo = async ({
 
   const stats = await statAsync(filePath);
   if (stats.size > TELEGRAM_MAX_VIDEO_BYTES) {
-    throw new TelegramFileTooLargeError(
-      stats.size,
-      TELEGRAM_MAX_VIDEO_BYTES,
-    );
+    throw new TelegramFileTooLargeError(stats.size, TELEGRAM_MAX_VIDEO_BYTES);
   }
 
   const token = getTelegramToken();
@@ -180,10 +177,7 @@ export const sendVideo = async ({
     const status = err.response?.status;
     const code = err.response?.data?.error_code;
     if (status === 413 || code === 413) {
-      throw new TelegramFileTooLargeError(
-        stats.size,
-        TELEGRAM_MAX_VIDEO_BYTES,
-      );
+      throw new TelegramFileTooLargeError(stats.size, TELEGRAM_MAX_VIDEO_BYTES);
     }
     throw err;
   }
