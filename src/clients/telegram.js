@@ -137,6 +137,7 @@ export const sendVideo = async ({
   filePath,
   caption,
   replyToMessageId,
+  hasSpoiler = true,
 }) => {
   if (!chatId) {
     throw new Error("chatId is required");
@@ -157,6 +158,10 @@ export const sendVideo = async ({
   form.append("video", createReadStream(filePath), {
     filename: basename(filePath),
   });
+  if (hasSpoiler) {
+    // Telegram Bot API: mark media as spoiler (client-side "censor" blur).
+    form.append("has_spoiler", "true");
+  }
   if (caption) {
     form.append("caption", caption);
   }
