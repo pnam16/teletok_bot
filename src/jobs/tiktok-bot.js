@@ -21,7 +21,8 @@ const SHORT_VIDEO_PATTERNS = [
     source: "YouTube",
   },
   {
-    pattern: /https?:\/\/(?:www\.)?instagram\.com\/reel\/[^\s]+/i,
+    pattern:
+      /https?:\/\/(?:www\.)?instagram\.com\/(?:reels|reel)\/[^\s]+/i,
     source: "Instagram",
   },
   {
