@@ -17,7 +17,7 @@ Teletok is a Node.js bot that listens in Telegram chats, detects short‑video l
   - **Webhook mode**: each incoming POST body is one update; `src/server/webhook.js` passes it to the same `processUpdate` function.
   - For each incoming message (or edited message), extracts the first short‑video URL from supported platforms (TikTok, YouTube Shorts, Instagram Reels).
   - Normalizes the URL and hashes it for the cache key. Looks up `DATA_DIR/cache` by hash; if found, reups from cache; otherwise downloads via the external CLI, stores in cache, then reuploads. Same URL in any chat reups from cache (one download per URL).
-  - Sends an “uploading video” chat action, then the video (reply to the original) with caption `Reup từ {source}`, or a short error message on failure (Vietnamese text).
+  - Sends an “uploading video” chat action, then the video (reply to the original) with a caption containing the source platform, requester, and normalized original link, or a short error message on failure (Vietnamese text).
   - **Delete uploaded message:** Reply to the bot’s reupload message with `/panic` or `/remove` to delete that message (only works for messages sent by the bot).
 
 - **Clients**:

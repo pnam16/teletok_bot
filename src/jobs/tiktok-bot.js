@@ -21,8 +21,7 @@ const SHORT_VIDEO_PATTERNS = [
     source: "YouTube",
   },
   {
-    pattern:
-      /https?:\/\/(?:www\.)?instagram\.com\/(?:reels|reel)\/[^\s]+/i,
+    pattern: /https?:\/\/(?:www\.)?instagram\.com\/(?:reels|reel)\/[^\s]+/i,
     source: "Instagram",
   },
   {
@@ -53,6 +52,56 @@ const extractShortVideoLink = (text) => {
   return null;
 };
 
+/** Telegram Bot API caption limit for sendVideo. */
+const MAX_VIDEO_CAPTION_CHARS = 1024;
+
+const indefiniteArticle = (word) =>
+  /^[aeiou]/i.test(String(word).trim().charAt(0)) ? "an" : "a";
+
+const buildCaption = ({message, source}) => {
+  const article = indefiniteArticle(source);
+  const sourceOnly = `${article} ${source} video`;
+
+  const from = message?.from;
+  let requester = null;
+  if (from) {
+    const name = [from.first_name, from.last_name]
+      .filter((part) => typeof part === "string" && part.trim().length > 0)
+      .join(" ")
+      .trim();
+    const username =
+      typeof from.username === "string" && from.username.trim().length > 0
+        ? from.username.trim()
+        : "";
+    requester =
+      name && username
+        ? `${name} (@${username})`
+        : name || (username ? `@${username}` : null);
+  }
+
+  if (!requester) {
+    return sourceOnly;
+  }
+
+  const tail = ` sent ${article} ${source} video`;
+  let caption = `${requester}${tail}`;
+  if (caption.length <= MAX_VIDEO_CAPTION_CHARS) {
+    return caption;
+  }
+
+  const ellipsis = "…";
+  const maxRequester = MAX_VIDEO_CAPTION_CHARS - tail.length - ellipsis.length;
+  if (maxRequester < 1) {
+    return sourceOnly;
+  }
+
+  const trimmed = requester.slice(0, maxRequester).trimEnd();
+  caption = `${trimmed}${ellipsis}${tail}`;
+  return caption.length <= MAX_VIDEO_CAPTION_CHARS
+    ? caption
+    : caption.slice(0, MAX_VIDEO_CAPTION_CHARS);
+};
+
 const handleShortVideoMessage = async (message, url, source, urlHash) => {
   const chat = message.chat;
   if (!chat || !chat.id) return;
@@ -71,7 +120,7 @@ const handleShortVideoMessage = async (message, url, source, urlHash) => {
     }
     try {
       await sendVideo({
-        caption: `Reup từ ${source}`,
+        caption: buildCaption({message, source}),
         chatId,
         filePath,
         replyToMessageId: messageId,
