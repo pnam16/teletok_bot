@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **teletok_bot** (85 symbols, 165 relationships, 12 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **teletok_bot** (126 symbols, 207 relationships, 11 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -99,3 +99,18 @@ To check whether embeddings exist, inspect `.gitnexus/meta.json` — the `stats.
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->
+
+## Learned User Preferences
+
+- Often attaches the project Cursor skill `.cursor/skills/upadte-readme/SKILL.md` for README work (`/readme` flow: keep `README.md` and `README.vi.md` aligned with the codebase when both exist).
+- TikTok repost caption copy has been iterated in both Vietnamese and English (source line and requester label wording).
+- Prefers avoiding hard-coded "magic strings"; centralize error codes/constants and reference them instead of inline literals.
+- Generally avoids committing local Cursor continual-learning hook state under `.cursor/hooks/state/` (keep it ignored in Git to prevent diff churn).
+
+## Learned Workspace Facts
+
+- Telegram TikTok repost job logic, captions, and requester formatting from `message.from` live in `src/jobs/tiktok-bot.js`.
+- Superpowers is enabled for this workspace via `.cursor/settings.json`.
+- On Windows, many Cursor-related subprocesses see a reduced PATH: GitNexus MCP may not resolve `npx`, and hooks often run in PowerShell without nvm/profile PATH, so bare `node`, `npx`, or `bun` can fail. Point MCP commands at a resolved `npx` or Node binary; in hook command strings use full paths to `node.exe` or `bun.exe` with PowerShell's call operator `&` when the shell pipes into the command.
+- Continual-learning plugin hook configs live under `.cursor/plugins/cache/.../continual-learning/.../hooks/`; edits there can be overwritten when the plugin cache refreshes—adding `node`/`bun` install locations to the user PATH is the more durable fix.
+- `.cursor/hooks/state/` (e.g. continual-learning index JSON) is excluded from Biome via `!**/.cursor/hooks/state` in `biome.json` `files.includes`.

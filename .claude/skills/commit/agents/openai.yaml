@@ -1,4 +1,0 @@
-interface:
-  display_name: "Commit"
-  short_description: "Generate Conventional Commit messages"
-  default_prompt: "Use $commit to generate a Conventional Commit message from the staged changes."

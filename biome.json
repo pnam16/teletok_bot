@@ -24,7 +24,7 @@
       "!**/package.json",
       "!**/pnpm-lock.yaml",
       "!**/README.md",
-      "!**/n8n.json"
+      "!**/.cursor/hooks/state"
     ]
   },
   "formatter": {

@@ -6,7 +6,10 @@ import {
   sendVideo,
   TelegramFileTooLargeError,
 } from "../clients/telegram.js";
-import {downloadShortVideo} from "../clients/tiktok.js";
+import {
+  downloadShortVideo,
+  VIDEO_UNAVAILABLE_AUDIENCES_CODE,
+} from "../clients/tiktok.js";
 import {getCachedVideoPath, storeCachedVideo} from "../lib/cache.js";
 import {hashUrl, normalizeUrl} from "../lib/dedup.js";
 
@@ -136,9 +139,13 @@ const handleShortVideoMessage = async (message, url, source, urlHash) => {
     );
     const isTooLarge =
       err instanceof TelegramFileTooLargeError || err.response?.status === 413;
+    const isUnavailableForAudience =
+      err?.code === VIDEO_UNAVAILABLE_AUDIENCES_CODE;
     const userMessage = isTooLarge
       ? "Video quá lớn (Telegram giới hạn 50MB), không thể gửi."
-      : "Tải video thất bại, thử lại sau nha.";
+      : isUnavailableForAudience
+        ? "Nội dung này hiện không khả dụng cho một số đối tượng nên bot không thể tải được."
+        : "Tải video thất bại, thử lại sau nha.";
     try {
       await sendTextMessage({
         chatId,
