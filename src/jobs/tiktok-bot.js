@@ -35,7 +35,7 @@ const SHORT_VIDEO_PATTERNS = [
   },
   {
     pattern:
-      /https?:\/\/(?:www\.|m\.)?(?:facebook\.com|fb\.com|fb\.watch)\/(?:share\/r\/[^\s]+|reel\/[^\s]+|watch\/[^\s]+|[^\s]*\?v=\d+)/i,
+      /https?:\/\/(?:www\.|m\.)?(?:facebook\.com|fb\.com|fb\.watch)\/(?:share\/[a-z]\/[^\s]+|reel\/[^\s]+|watch\/[^\s]+|[^\s]*\?v=\d+)/i,
     source: "Facebook",
   },
 ];
