@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.6/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.1/schema.json",
   "assist": {
     "actions": {
       "source": {
@@ -93,7 +93,7 @@
         "noBarrelFile": "error",
         "noNamespaceImport": "error"
       },
-      "recommended": true,
+      "preset": "recommended",
       "style": {
         "noNonNullAssertion": "off",
         "noUselessElse": "error",

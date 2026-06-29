@@ -132,57 +132,80 @@ export class TelegramFileTooLargeError extends Error {
   }
 }
 
+/**
+ * Send a video either by uploading a local file (`filePath`) or by re-using a
+ * previously uploaded `fileId` (zero byte transfer). Returns the Telegram
+ * Message result on success (so callers can capture `result.video.file_id`).
+ * `retry` is forwarded to withRetry (e.g. a file_id resend should fall back on
+ * any HTTP rejection instead of retrying a permanently-stale id).
+ */
 export const sendVideo = async ({
   chatId,
   filePath,
+  fileId,
   caption,
   replyToMessageId,
   hasSpoiler = true,
+  retry,
 }) => {
   if (!chatId) {
     throw new Error("chatId is required");
   }
-  if (!filePath) {
-    throw new Error("filePath is required");
+  if (!filePath && !fileId) {
+    throw new Error("filePath or fileId is required");
   }
 
-  const stats = await statAsync(filePath);
-  if (stats.size > TELEGRAM_MAX_VIDEO_BYTES) {
-    throw new TelegramFileTooLargeError(stats.size, TELEGRAM_MAX_VIDEO_BYTES);
+  // Size guard only applies to local uploads; a file_id has no local file.
+  let sizeBytes = null;
+  if (!fileId) {
+    const stats = await statAsync(filePath);
+    sizeBytes = stats.size;
+    if (sizeBytes > TELEGRAM_MAX_VIDEO_BYTES) {
+      throw new TelegramFileTooLargeError(sizeBytes, TELEGRAM_MAX_VIDEO_BYTES);
+    }
   }
 
   const token = getTelegramToken();
   const url = `${TELEGRAM_API_BASE}/bot${token}/sendVideo`;
-  const form = new FormData();
-  form.append("chat_id", String(chatId));
-  form.append("video", createReadStream(filePath), {
-    filename: basename(filePath),
-  });
-  if (hasSpoiler) {
-    // Telegram Bot API: mark media as spoiler (client-side "censor" blur).
-    form.append("has_spoiler", "true");
-  }
-  if (caption) {
-    form.append("caption", caption);
-  }
-  if (replyToMessageId) {
-    form.append("reply_to_message_id", String(replyToMessageId));
-  }
 
   try {
-    await withRetry(async () => {
-      await axios.post(url, form, {
+    return await withRetry(async () => {
+      // Build the multipart form inside the retry closure: a form-data body is a
+      // one-shot stream, so reusing it across retries would re-POST an already
+      // consumed (empty) body. The upload path retries on timeout/5xx.
+      const form = new FormData();
+      form.append("chat_id", String(chatId));
+      if (fileId) {
+        form.append("video", fileId);
+      } else {
+        form.append("video", createReadStream(filePath), {
+          filename: basename(filePath),
+        });
+      }
+      if (hasSpoiler) {
+        // Telegram Bot API: mark media as spoiler (client-side "censor" blur).
+        form.append("has_spoiler", "true");
+      }
+      if (caption) {
+        form.append("caption", caption);
+      }
+      if (replyToMessageId) {
+        form.append("reply_to_message_id", String(replyToMessageId));
+      }
+
+      const res = await axios.post(url, form, {
         headers: form.getHeaders(),
         maxBodyLength: Number.POSITIVE_INFINITY,
         maxContentLength: Number.POSITIVE_INFINITY,
         timeout: TELEGRAM_VIDEO_UPLOAD_TIMEOUT_MS,
       });
-    });
+      return res.data?.result;
+    }, retry);
   } catch (err) {
     const status = err.response?.status;
     const code = err.response?.data?.error_code;
-    if (status === 413 || code === 413) {
-      throw new TelegramFileTooLargeError(stats.size, TELEGRAM_MAX_VIDEO_BYTES);
+    if ((status === 413 || code === 413) && sizeBytes != null) {
+      throw new TelegramFileTooLargeError(sizeBytes, TELEGRAM_MAX_VIDEO_BYTES);
     }
     throw err;
   }

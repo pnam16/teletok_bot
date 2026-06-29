@@ -1,7 +1,8 @@
 import {spawn} from "child_process";
-import {mkdtemp, readdir, rm} from "fs/promises";
-import {tmpdir} from "os";
+import {mkdir, mkdtemp, readdir, rm} from "fs/promises";
 import {join} from "path";
+
+import {DATA_DIR} from "../config/index.js";
 
 const VIDEO_EXT_PATTERN = /\.(mp4|mkv|webm|mov|avi|flv)$/i;
 const MAX_DOWNLOADER_LOG_CHARS = 8000;
@@ -15,7 +16,13 @@ const appendTail = (current, next, maxChars = MAX_DOWNLOADER_LOG_CHARS) => {
 };
 
 const createTempDir = async () => {
-  const base = tmpdir();
+  // Keep the download temp dir on the SAME filesystem as the cache (DATA_DIR/cache)
+  // so storeCachedVideo moves the finished file with a metadata-only rename instead
+  // of a full byte copy. With os.tmpdir() (/tmp) the rename crosses the /app/data
+  // volume boundary in Docker, throws EXDEV, and falls back to copying every
+  // (up to ~2GB) video on each cache miss.
+  const base = join(DATA_DIR, "tmp");
+  await mkdir(base, {recursive: true});
   const prefix = join(base, "teletok-");
   return await mkdtemp(prefix);
 };

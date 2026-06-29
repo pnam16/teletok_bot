@@ -96,8 +96,8 @@ export const createWebhookServer = (options = {}) => {
  * Start webhook server and register URL with Telegram.
  * @param {{ port?: number, webhookUrl: string, secretToken?: string }} options
  */
-export const runWebhookServer = async (options) => {
-  const port = options.port ?? (Number(process.env.WEBHOOK_PORT, 10) || 3000);
+export const runWebhookServer = async (options = {}) => {
+  const port = options.port ?? (Number(process.env.WEBHOOK_PORT) || 3000);
   const webhookUrl = options.webhookUrl ?? process.env.TELEGRAM_WEBHOOK_URL;
   const secretToken = options.secretToken ?? process.env.WEBHOOK_SECRET;
 

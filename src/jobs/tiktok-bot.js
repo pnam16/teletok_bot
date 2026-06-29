@@ -10,7 +10,13 @@ import {
   downloadShortVideo,
   VIDEO_UNAVAILABLE_AUDIENCES_CODE,
 } from "../clients/tiktok.js";
-import {getCachedVideoPath, storeCachedVideo} from "../lib/cache.js";
+import {
+  getCachedFileId,
+  getCachedVideoPath,
+  removeCachedFileId,
+  storeCachedFileId,
+  storeCachedVideo,
+} from "../lib/cache.js";
 import {hashUrl, normalizeUrl} from "../lib/dedup.js";
 
 const SHORT_VIDEO_PATTERNS = [
@@ -107,13 +113,45 @@ const buildCaption = ({message, source}) => {
 
 const handleShortVideoMessage = async (message, url, source, urlHash) => {
   const chat = message.chat;
-  if (!chat || !chat.id) return;
+  if (!chat?.id) return;
 
   const chatId = chat.id;
   const messageId = message.message_id;
+  const caption = buildCaption({message, source});
 
   try {
     await sendChatAction({action: "upload_video", chatId});
+
+    // Fast path: re-send by cached Telegram file_id — zero byte transfer, no disk read.
+    const cachedFileId = await getCachedFileId(urlHash);
+    if (cachedFileId) {
+      try {
+        await sendVideo({
+          caption,
+          chatId,
+          fileId: cachedFileId,
+          replyToMessageId: messageId,
+          // A stale id is rejected with an HTTP status (400/5xx) and won't fix
+          // itself on retry — fall back to upload at once. Only genuine
+          // connection errors (no response) are worth retrying here.
+          retry: {retryable: (err) => !err?.response},
+        });
+        return;
+      } catch (err) {
+        // file_id is bound to the Bot API server + its data volume; if that was
+        // wiped/migrated the id is stale. Drop it and fall back to a real upload.
+        console.error(
+          new Date().toISOString(),
+          "sendVideo by file_id failed; falling back to upload:",
+          err?.message ?? err,
+        );
+        await removeCachedFileId(urlHash).catch(() => {
+          // best-effort cleanup; ignore errors
+        });
+      }
+    }
+
+    // Slow path: serve from disk cache, or download then cache.
     let cleanup = null;
     let filePath = await getCachedVideoPath(urlHash);
     if (!filePath) {
@@ -122,12 +160,19 @@ const handleShortVideoMessage = async (message, url, source, urlHash) => {
       cleanup = downloaded.cleanup;
     }
     try {
-      await sendVideo({
-        caption: buildCaption({message, source}),
+      const result = await sendVideo({
+        caption,
         chatId,
         filePath,
         replyToMessageId: messageId,
       });
+      // Remember the file_id so future requests for this url skip the upload.
+      const fileId = result?.video?.file_id;
+      if (fileId) {
+        await storeCachedFileId(urlHash, fileId).catch(() => {
+          // non-fatal: a missed file_id just means the next request re-uploads
+        });
+      }
     } finally {
       if (typeof cleanup === "function") await cleanup();
     }
